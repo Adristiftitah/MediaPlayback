@@ -18,6 +18,8 @@ package com.example.android.classicalmusicquiz;
 
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -55,7 +57,7 @@ import com.google.android.exoplayer2.util.Util;
 
 import java.util.ArrayList;
 
-public class QuizActivity extends AppCompatActivity implements View.OnClickListener, ExoPlayer.EventListener  {
+public class QuizActivity extends AppCompatActivity implements View.OnClickListener, ExoPlayer.EventListener {
 
     private static final int CORRECT_ANSWER_DELAY_MILLIS = 1000;
     private static final String REMAINING_SONGS_KEY = "remaining_songs";
@@ -69,7 +71,7 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
     private Button[] mButtons;
     private SimpleExoPlayer mExoPlayer;
     private SimpleExoPlayerView mPlayerView;
-    private MediaSessionCompat mMediaSession;
+    private static MediaSessionCompat mMediaSession;
     private PlaybackStateCompat.Builder mStateBuilder;
     private NotificationManager mNotificationManager;
 
@@ -114,13 +116,14 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
         initializeMediaSession();
 
         Sample answerSample = Sample.getSampleByID(this, mAnswerSampleID);
-         if (answerSample == null) {
-             Toast.makeText(this, getString(R.string.sample_not_found_error),
-                     Toast.LENGTH_SHORT).show();
-             return;
-         }
+        if (answerSample == null) {
+            Toast.makeText(this, getString(R.string.sample_not_found_error),
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
         initializePlayer(Uri.parse(answerSample.getUri()));
     }
+
     private void initializeMediaSession() {
 
         // Create a MediaSessionCompat.
@@ -175,12 +178,19 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
         return buttons;
     }
 
+    /**
+     * Shows Media Style notification, with actions that depend on the current MediaSession
+     * PlaybackState.
+     *
+     * @param state The PlaybackState of the MediaSession.
+     */
+
     private void showNotification(PlaybackStateCompat state) {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
 
         int icon;
         String play_pause;
-        if(state.getState() == PlaybackStateCompat.STATE_PLAYING){
+        if (state.getState() == PlaybackStateCompat.STATE_PLAYING) {
             icon = R.drawable.exo_controls_pause;
             play_pause = getString(R.string.pause);
         } else {
@@ -211,7 +221,7 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
                 .addAction(playPauseAction)
                 .setStyle(new NotificationCompat.MediaStyle()
                         .setMediaSession(mMediaSession.getSessionToken())
-                        .setShowActionsInCompactView(0,1));
+                        .setShowActionsInCompactView(0, 1));
 
 
         mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -222,7 +232,7 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
     private void initializePlayer(Uri mediaUri) {
         if (mExoPlayer == null) {
             // Create an instance of the ExoPlayer.
-                    TrackSelector trackSelector = new DefaultTrackSelector();
+            TrackSelector trackSelector = new DefaultTrackSelector();
             LoadControl loadControl = new DefaultLoadControl();
             mExoPlayer = ExoPlayerFactory.newSimpleInstance(this, trackSelector, loadControl);
             mPlayerView.setPlayer(mExoPlayer);
@@ -234,13 +244,14 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
             mExoPlayer.setPlayWhenReady(true);
             mExoPlayer.addListener(this);
         }
-        }
+    }
+
     private void releasePlayer() {
         mNotificationManager.cancelAll();
         mExoPlayer.stop();
         mExoPlayer.release();
         mExoPlayer = null;
-        }
+    }
 
     /**
      * The OnClick method for all of the answer buttons. The method uses the index of the button
@@ -321,12 +332,14 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
             }
         }
     }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
         releasePlayer();
         mMediaSession.setActive(false);
     }
+
     @Override
     public void onTimelineChanged(Timeline timeline, Object manifest) {
     }
@@ -348,10 +361,10 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
-        if((playbackState == ExoPlayer.STATE_READY) && playWhenReady){
+        if ((playbackState == ExoPlayer.STATE_READY) && playWhenReady) {
             mStateBuilder.setState(PlaybackStateCompat.STATE_PLAYING,
                     mExoPlayer.getCurrentPosition(), 1f);
-        } else if((playbackState == ExoPlayer.STATE_READY)){
+        } else if ((playbackState == ExoPlayer.STATE_READY)) {
             mStateBuilder.setState(PlaybackStateCompat.STATE_PAUSED,
                     mExoPlayer.getCurrentPosition(), 1f);
         }
@@ -366,24 +379,42 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public void onPositionDiscontinuity() {
     }
-        /**
 
-         * Media Session Callbacks, where all external clients control the player.
-         */
-        private class MySessionCallback extends MediaSessionCompat.Callback {
+    /**
+     * Media Session Callbacks, where all external clients control the player.
+     */
+    private class MySessionCallback extends MediaSessionCompat.Callback {
         @Override
         public void onPlay() {
             mExoPlayer.setPlayWhenReady(true);
         }
+
         @Override
         public void onPause() {
             mExoPlayer.setPlayWhenReady(false);
         }
+
         @Override
         public void onSkipToPrevious() {
             mExoPlayer.seekTo(0);
         }
     }
-}
+
+        /**
+         * Broadcast Receiver registered to receive the MEDIA_BUTTON intent coming from clients.
+         */
+        public static class MediaReceiver extends BroadcastReceiver {
+
+            public MediaReceiver() {
+            }
+
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                MediaButtonReceiver.handleIntent(mMediaSession, intent);
+            }
+        }
+    }
+
+
 
 
